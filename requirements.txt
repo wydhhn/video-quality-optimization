@@ -1,0 +1,25 @@
+# ── 深度学习框架 ──────────────────────────────────────────────
+# CPU 版：pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# CUDA 版：见 https://pytorch.org/get-started/locally/
+torch>=2.0
+torchvision>=0.15
+
+# ── 数值 / 图像 ───────────────────────────────────────────────
+numpy>=1.24
+opencv-python>=4.8
+Pillow>=10.0
+
+# ── 视频编解码 ────────────────────────────────────────────────
+# imageio-ffmpeg 自带 ffmpeg 可执行文件，无需系统安装 ffmpeg
+imageio-ffmpeg>=0.4.9
+ffmpeg-python>=0.2.0
+
+# ── 模型权重下载 ──────────────────────────────────────────────
+huggingface_hub>=0.20
+
+# ── 说明 ──────────────────────────────────────────────────────
+# 1. 不需要安装 mmcv / mmengine。
+#    vendor/vsr/compat.py 会在导入时把 mmcv.ops / mmcv.cnn / mmengine.model
+#    等被用到的接口注入 sys.modules，因此 BasicVSR++ 官方代码可以直接跑。
+# 2. 不需要安装 transformers。OmniShotCut 的 requirements.txt 里锁了
+#    transformers==4.57.3，但其推理路径完全没有 import 它。

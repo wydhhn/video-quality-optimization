@@ -1,0 +1,121 @@
+{
+  "duration": 121.6,
+  "fps": 30,
+  "size": [
+    1920,
+    1080
+  ],
+  "source": "多条公开 AI 生成视频拼接（Sora/Kling/Hunyuan/Pika/Wan 等）",
+  "expected_cuts": [
+    5.03,
+    15.47,
+    25.9,
+    36.33,
+    41.43,
+    46.53,
+    51.63,
+    56.73,
+    61.83,
+    66.93,
+    72.03,
+    76.07,
+    80.1,
+    85.2,
+    90.3,
+    100.73,
+    111.17
+  ],
+  "n_clips": 18,
+  "clips": [
+    {
+      "name": "kling_000022.mp4",
+      "src_size": "1920x1088",
+      "duration": 5.03
+    },
+    {
+      "name": "kling_000004.mp4",
+      "src_size": "1440x1440",
+      "duration": 10.43
+    },
+    {
+      "name": "kling_000007.mp4",
+      "src_size": "1080x1920",
+      "duration": 10.43
+    },
+    {
+      "name": "kling_000033.mp4",
+      "src_size": "1440x1440",
+      "duration": 10.43
+    },
+    {
+      "name": "kling_000001.mp4",
+      "src_size": "1440x1440",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000003.mp4",
+      "src_size": "1920x1080",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000010.mp4",
+      "src_size": "1440x1440",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000015.mp4",
+      "src_size": "1080x1920",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000017.mp4",
+      "src_size": "1080x1920",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000021.mp4",
+      "src_size": "1920x1080",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000032.mp4",
+      "src_size": "1080x1920",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000008.mp4",
+      "src_size": "1920x1080",
+      "duration": 5.04
+    },
+    {
+      "name": "kling_000018.mp4",
+      "src_size": "1920x1080",
+      "duration": 5.04
+    },
+    {
+      "name": "kling_000009.mp4",
+      "src_size": "1888x1088",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000006.mp4",
+      "src_size": "1120x1824",
+      "duration": 5.1
+    },
+    {
+      "name": "kling_000005.mp4",
+      "src_size": "1248x1632",
+      "duration": 10.43
+    },
+    {
+      "name": "kling_000035.mp4",
+      "src_size": "1248x1632",
+      "duration": 10.43
+    },
+    {
+      "name": "kling_000023.mp4",
+      "src_size": "960x2112",
+      "duration": 10.43
+    }
+  ]
+}
