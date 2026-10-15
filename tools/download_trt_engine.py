@@ -20,23 +20,40 @@ ROOT = Path(__file__).resolve().parent.parent
 TRT_DIR = ROOT / "trt5"
 
 # 引擎发布在 GitHub Release 上（tag → 资产）
-RELEASE = "https://github.com/wydhhn/video-quality-optimization/releases/download/v1.1.0-trt"
+RELEASE = ("https://github.com/Liqiu-Chen/video-enhance-service"
+           "/releases/download/v1.1.0-engines")
 
-# (文件名, 字节数, 说明)
+# ★ 引擎体积超 GitHub 的 100 MB 单文件上限，所以放在另一个仓库的 Release 上
+#   （video-enhance-service 是我们的开发仓库；二进制和源码分开是常见做法）。
+#
+# (归档文件名, 落盘文件名, 字节数, 说明)
+#   两个名字不同是因为 **GitHub 会把资产名里的 `+` 替换成 `.`** ——
+#   上传时叫 rife_..._warp+resize.trt，下载 URL 里却必须是 warp.resize.trt。
 MANIFEST = [
     (
-        "vsr_tf32_t8_836x480_x4.trt",
-        141032847,
-        "VSR 主引擎 · TensorRT TF32 · t=8 · 输入 836x480 → ×4 输出 · 78.54 dB / 1.69×",
+        "vsr_tf32_t8_836x480_x4.trt", "vsr_tf32_t8_836x480_x4.trt",
+        141037172,
+        "VSR 主引擎 · TensorRT TF32 · t=8 · 输入 836x480 → ×4 · 78.54 dB / 1.69×",
+    ),
+    (
+        "vsr_tf32_t2_836x480_x4.trt", "vsr_tf32_t2_836x480_x4.trt",
+        162586804,
+        "VSR 引擎（t=2）· TF32 · 80.28 dB / 1.86× · 短片段或快速验证用",
+    ),
+    (
+        "rife_3360x1920_warp.resize.trt",            # 下载 URL 里的名字
+        "rife_3360x1920_warp+resize.trt",            # 落盘用的名字（代码按这个找）
+        354141916,
+        "RIFE 4x 路径引擎 · GridSample/Resize 留 fp32 · 49.88 dB",
     ),
 ]
-
 
 def _human(n: int) -> str:
     return f"{n / 2**20:.1f} MB"
 
 
 def download(url: str, dest: Path, expect: int) -> bool:
+    """url 里的文件名可能与 dest 不同（GitHub 会把 + 换成 .）。"""
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     print(f"      源：{url}")
@@ -81,27 +98,27 @@ def main():
     print()
 
     if args.list:
-        for name, size, desc in MANIFEST:
-            mark = "✓ 已有" if (out_dir / name).exists() else "  未下载"
-            print(f"  [{mark}] {name}  ({_human(size)})")
+        for urlname, localname, size, desc in MANIFEST:
+            mark = "✓ 已有" if (out_dir / localname).exists() else "  未下载"
+            print(f"  [{mark}] {localname}  ({_human(size)})")
             print(f"           {desc}")
         return 0
 
-    todo = [(n, s, d) for n, s, d in MANIFEST
-            if args.name is None or n == args.name]
+    todo = [(u, l, s, d) for u, l, s, d in MANIFEST
+            if args.name is None or l == args.name or u == args.name]
     if not todo:
         print(f"❌ MANIFEST 里没有 {args.name}")
         return 1
 
     ok = True
-    for name, size, desc in todo:
-        dest = out_dir / name
+    for urlname, localname, size, desc in todo:
+        dest = out_dir / localname
         if dest.exists() and (not size or dest.stat().st_size == size):
-            print(f"  ⏭  {name} 已存在（{_human(dest.stat().st_size)}），跳过")
+            print(f"  ⏭  {localname} 已存在（{_human(dest.stat().st_size)}），跳过")
             continue
-        print(f"  [下载] {name}  ({_human(size)})")
+        print(f"  [下载] {localname}  ({_human(size)})")
         print(f"      {desc}")
-        if not download(f"{RELEASE}/{name}", dest, size):
+        if not download(f"{RELEASE}/{urlname}", dest, size):
             ok = False
 
     print()
