@@ -162,3 +162,14 @@ cython_debug/
 
 # macOS
 .DS_Store
+
+# ── TensorRT 引擎与构建中间物（体积大，走 GitHub Release）─────────
+# 单文件 135 MB，超 GitHub 的 100 MB 上限，推不上去。
+# 下载：python tools/download_trt_engine.py
+*.trt
+*.engine
+trt5/
+webapp/cache/
+# ONNX 导出的外部数据（.weight / _Constant_* 这类散文件）
+*.onnx
+*.onnx.data
