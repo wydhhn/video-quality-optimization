@@ -178,3 +178,40 @@ TRT 的 GridSample **只支持 zeros**，ONNX 写 border 会被静默忽略（�
 | TRT 构建 `LLVM ERROR: out of memory` | 图太大，检查是否做了"补边再裁" |
 | 精度突然变成 5 dB、最大差 545 | 喂进去的张量 dtype 和引擎输入不符（读到未初始化内存） |
 | 慢 4~5 倍但不报错 | **显存 reserved 超了物理显存**，驱动在换页 |
+| `CUDA error 700 launching __myl_SlicReshMove` + `MyelinCheckException` | **输入张量还在 CPU 上**（只转了 dtype 没转 device）→ CPU 指针被当成显存地址。或 **`trt.Runtime` 被 GC 了**（见下） |
+
+## 两个 TRT Python API 的隐蔽坑（实测踩过）
+
+### 1. `trt.Runtime` 必须存成实例属性
+
+```python
+# ❌ __init__ 返回后 Runtime 被 GC，engine 成了悬空引用
+runtime = trt.Runtime(logger)
+self.engine = runtime.deserialize_cuda_engine(ser)
+
+# ✅
+self.runtime = trt.Runtime(logger)
+self.engine = self.runtime.deserialize_cuda_engine(ser)
+```
+
+症状是运行时报 `CUDA error 700` + `MyelinCheckException: l2cm_layer_internal.cpp`
+—— **同一个 .trt 在别的封装里跑得好好的，唯独这里崩**，因为那边恰好把它
+留在了表达式里没被立刻回收。
+
+### 2. 不要缓存 CUDA stream 的裸句柄
+
+```python
+# ❌ 句柄会失效
+self._stream = torch.cuda.current_stream().cuda_stream
+...
+self.ctx.execute_async_v3(self._stream)
+
+# ✅ 每次重新取
+self.ctx.execute_async_v3(torch.cuda.current_stream().cuda_stream)
+```
+
+### 3. 传张量给 TRT 前务必确认在 CUDA 上
+
+忘了一个 `.to(device)`，报错会是上面那串 CUDA 700 / MyelinCheckException，
+**完全指不到「张量还在内存条上」**。所以 `TrtRunner.__call__` 里加了
+`if not x.is_cuda: raise ValueError(...)` 兜底 —— 让下一个人一眼看到根因。

@@ -192,6 +192,30 @@ BasicVSR++ 实配(G=16)      7.158e-06      3.49e-06    ✅
 比"补边再裁"好得多 —— 后者会让中间张量变大、图更深，
 TRT 构建时直接 `LLVM ERROR: out of memory`。
 
+### 3.4 ★ 坑四：TRT Python API 的三个隐蔽陷阱
+
+这三个都是**跑起来才暴露**的，报错信息都指向别处。
+
+**(a) `trt.Runtime` 必须存成实例属性。**
+写成局部变量时，`__init__` 返回后它被 GC，而 engine 依附于它 →
+悬空引用。症状是运行时报
+`CUDA error 700` + `MyelinCheckException: l2cm_layer_internal.cpp`，
+**而且同一个 .trt 在别的封装里跑得好好的**（那边恰好把它留在表达式里
+没被立刻回收，纯属运气）。
+
+**(b) 不要缓存 `torch.cuda.current_stream().cuda_stream` 这个裸句柄。**
+每次重新取。缓存会失效。
+
+**(c) 传张量前必须确认在 CUDA 上。**
+```python
+t = t.float().div_(255.0).to(engine.in_dtype)   # ❌ 只转了 dtype，还在 CPU
+t = t.to(device).float().div_(255.0).to(engine.in_dtype)   # ✅
+```
+CPU 指针被 TRT 当成显存地址去解引用 —— 报出来的是
+`CUDA error 700 launching __myl_SlicReshMove kernel`，
+**完全看不出是"忘搬显存"**。所以运行封装里应该加一道
+`assert x.is_cuda`，把根因摆在报错信息里。
+
 ---
 
 ## 4. 正确的构建流程
