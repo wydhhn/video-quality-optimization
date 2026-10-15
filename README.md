@@ -26,6 +26,9 @@ python run.py --video 输入.mp4 --mode sr          # 超分
 python run.py --video 输入.mp4 --mode sr+fi       # 超分 + 插帧
 ```
 
+> **已知问题与优化空间**（RIFE-TRT 精度 / VSR-TRT 分辨率适配 / 云服务器带宽）
+> → [`docs/遗留问题说明.md`](docs/遗留问题说明.md)
+
 ---
 
 ## 二、核心思路：为什么必须「镜头感知」
