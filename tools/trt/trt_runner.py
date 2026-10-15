@@ -52,8 +52,15 @@ class TrtRunner:
         logger = trt.Logger(trt.Logger.ERROR)
         with open(engine_path, "rb") as f:
             ser = f.read()
-        runtime = trt.Runtime(logger)
-        self.engine = runtime.deserialize_cuda_engine(ser)
+        # ★ Runtime 必须**存成实例属性**，不能让它是局部变量。
+        #   engine 的生命周期依附于创建它的 Runtime —— Runtime 被 GC 掉之后，
+        #   engine 就成了悬空引用，运行时表现为
+        #       CUDA error: an illegal memory access was encountered
+        #       Internal Error: MyelinCheckException ... l2cm_layer_internal.cpp
+        #   （排查了很久：同一个 .trt 在别的封装里跑得好好的，唯独这里崩，
+        #     唯一差别就是那边把 Runtime 留在了表达式里没被立刻回收。）
+        self.runtime = trt.Runtime(logger)
+        self.engine = self.runtime.deserialize_cuda_engine(ser)
         if self.engine is None:
             raise RuntimeError(f"引擎反序列化失败: {engine_path}")
         self.ctx = self.engine.create_execution_context()
@@ -74,11 +81,21 @@ class TrtRunner:
         self.out_dtype = dm.get(self.engine.get_tensor_dtype(self.out_name),
                                 torch.float32)
         self.in_shape = tuple(self.engine.get_tensor_shape(self.in_name))
-        self._cuda_stream = None
 
     # ------------------------------------------------------------------ #
     def __call__(self, x):
         torch = self.torch
+        # ★ 必须拦下 CPU 张量。
+        #   把 CPU 张量的 data_ptr() 传给 TRT，它会当成显存地址去解引用 ——
+        #   报出来的是 `CUDA error 700 launching __myl_SlicReshMove kernel` 或
+        #   `MyelinCheckException: l2cm_layer_internal.cpp ... CHECK(false)`，
+        #   完全指不到"张量还在内存条上"这个真正的原因。
+        #   （踩过：pipeline/sr_trt.py 里漏了一个 .to(device)。）
+        if not x.is_cuda:
+            raise ValueError(
+                f"输入张量在 {x.device}，TensorRT 引擎只能吃 CUDA 张量。\n"
+                f"  多半是忘了 `.to('cuda')` —— CPU 指针被当成显存地址会触发\n"
+                f"  CUDA error 700 / MyelinCheckException，报错信息完全指不到根因。")
         if x.dtype != self.in_dtype:
             x = x.to(self.in_dtype)
         if tuple(x.shape) != self.in_shape:
@@ -90,13 +107,18 @@ class TrtRunner:
         x = x.contiguous()
         self.ctx.set_input_shape(self.in_name, self.in_shape)
         out_shape = tuple(self.ctx.get_tensor_shape(self.out_name))
-        out = torch.empty(out_shape, dtype=self.out_dtype, device="cuda")
+        out = torch.empty(out_shape, dtype=self.out_dtype, device=x.device)
 
         self.ctx.set_tensor_address(self.in_name, x.data_ptr())
         self.ctx.set_tensor_address(self.out_name, out.data_ptr())
-        if self._cuda_stream is None:
-            self._cuda_stream = torch.cuda.current_stream().cuda_stream
-        self.ctx.execute_async_v3(self._cuda_stream)
+        # ★ 每次都重新取当前 stream，**不要缓存这个裸句柄**。
+        #   缓存过一版，结果运行时报 `CUDA error: an illegal memory access`
+        #   （还伴随 MyelinCheckException）。句柄在上下文/stream 变化后会失效，
+        #   而失效的句柄传给 execute_async_v3 是未定义行为。
+        #   参考实现（build_trt_rife.py 的 TrtRife）也是每次都取的。
+        ok = self.ctx.execute_async_v3(torch.cuda.current_stream().cuda_stream)
+        if not ok:
+            raise RuntimeError("execute_async_v3 返回失败")
         return out
 
     def __del__(self):

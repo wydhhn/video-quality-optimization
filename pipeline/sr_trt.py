@@ -97,6 +97,12 @@ class SrTrtEngine:
         self._trt = None
         self._built = False
 
+        # ★ 必须与 SrEngine 保持一致：flow.py 用它算输出尺寸
+        #     W1 = W0 * (self.sr.scale if do_sr else 1)
+        #   BasicVSR++ 固定 ×4（4 个 pixel-shuffle 上采样），不随 out_scale 变。
+        #   （漏了这个属性会在 flow.run() 里直接 AttributeError —— 踩过。）
+        self.scale = 4
+
         if self.chunk + self.overlap != self.t:
             # 刻意允许，但要提醒：这时流水线喂的长度和引擎不符
             self._log(f"⚠️ chunk({self.chunk}) + overlap({self.overlap}) "
@@ -144,10 +150,17 @@ class SrTrtEngine:
         """(t,H,W,3) uint8 → (t,4H,4W,3) uint8。长度必须恰好是 t。"""
         t = self.torch.from_numpy(np.ascontiguousarray(frames))
         t = t.permute(0, 3, 1, 2)[None]              # (1,t,3,H,W)
-        t = t.float().div_(255.0).to(self._trt.in_dtype)
+        # ★ 必须先搬到 CUDA，再转 dtype。
+        #   漏掉 .to(device) 时张量会留在 CPU 上，而 TrtRunner 把
+        #   x.data_ptr() 当显存地址传给 TRT —— 引擎按显存解引用一块内存条上的
+        #   缓冲区，报出来的是
+        #       CUDA error 700 launching __myl_SlicReshMove kernel
+        #       MyelinCheckException ... l2cm_layer_internal.cpp
+        #   完全看不出是"忘搬显存"。（TrtRunner 里也加了断言兜底。）
+        t = t.to(self.device).float().div_(255.0).to(self._trt.in_dtype)
         y = self._trt(t)                             # (1,t,3,4H,4W)
         y = y[0].permute(0, 2, 3, 1).float().clamp(0, 1).mul(255.0).round()
-        return y.to(np.uint8).cpu().numpy()
+        return y.to(self.torch.uint8).cpu().numpy()
 
     def upscale(self, frames: np.ndarray, cut_frames=None,
                 shot_aware: bool = True, on_progress=None) -> np.ndarray:

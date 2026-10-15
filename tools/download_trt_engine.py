@@ -52,14 +52,36 @@ def _human(n: int) -> str:
     return f"{n / 2**20:.1f} MB"
 
 
-def download(url: str, dest: Path, expect: int) -> bool:
+def _opener(proxy: str | None):
+    """构造 urlopen 用的 opener。
+
+    ★ 为什么要自己构造、而不是直接用 `urllib.request.urlopen`：
+    后者会**自动读取环境变量里的 `http_proxy` / `https_proxy`**。
+    如果机器上恰好有个到不了 GitHub 的本地代理（很常见：各种软件装的
+    内置代理会往环境变量里塞 `127.0.0.1:xxxxx`），下载就会莫名其妙地
+    `502 Bad Gateway`，而报错完全看不出是代理问题。
+
+    所以这里的策略是**显式控制**：
+      · 传了 --proxy 或设了 FI_PROXY → 只走那个代理
+      · 没传 → **不走任何代理**（直连）
+    想用系统代理的话显式设置 FI_PROXY 即可。
+    """
+    if proxy:
+        handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
+        print(f"      代理：{proxy}")
+    else:
+        handler = urllib.request.ProxyHandler({})      # 空字典 = 显式禁用代理
+    return urllib.request.build_opener(handler)
+
+
+def download(url: str, dest: Path, expect: int, proxy: str | None = None) -> bool:
     """url 里的文件名可能与 dest 不同（GitHub 会把 + 换成 .）。"""
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     print(f"      源：{url}")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+        with _opener(proxy).open(req, timeout=60) as r, open(tmp, "wb") as f:
             total = int(r.headers.get("Content-Length") or expect)
             got, last = 0, 0
             while True:
@@ -91,6 +113,11 @@ def main():
     ap.add_argument("--list", action="store_true", help="只列出可下载的项")
     ap.add_argument("--name", help="指定要下载的文件名（默认全部）")
     ap.add_argument("--dir", default=str(TRT_DIR), help="下载到哪个目录")
+    ap.add_argument("--proxy", default=os.environ.get("FI_PROXY", ""),
+                    help="走哪个代理（如 http://127.0.0.1:7897）。"
+                         "不传则**直连**；也可用环境变量 FI_PROXY。"
+                         "注意：不会使用环境变量里的 http_proxy —— 那通常是别的"
+                         "软件塞进来的、到不了 GitHub 的内置代理")
     args = ap.parse_args()
 
     out_dir = Path(args.dir)
@@ -118,7 +145,7 @@ def main():
             continue
         print(f"  [下载] {localname}  ({_human(size)})")
         print(f"      {desc}")
-        if not download(f"{RELEASE}/{urlname}", dest, size):
+        if not download(f"{RELEASE}/{urlname}", dest, size, args.proxy or None):
             ok = False
 
     print()
@@ -127,8 +154,12 @@ def main():
         print("       from pipeline.sr_trt import SrTrtEngine")
         print("       sr = SrTrtEngine(chunk=8)     # 自动找到 t=8 的引擎")
     else:
-        print("  ⚠️ 有下载失败。若 Release 还没建好，可用 tools/trt/ 自己构建：")
-        print("       python tools/trt/export_vsr_onnx.py --t 8 --size 836 480")
+        print("  ⚠️ 有下载失败。常见原因：")
+        print("       1) 网络到不了 GitHub —— 试试指定代理：")
+        print("            python tools/download_trt_engine.py --proxy http://127.0.0.1:7897")
+        print("          （端口按你自己的代理软件填，Clash 系通常是 7897）")
+        print("       2) 若是国内网络且不想配代理，可改用镜像或自己构建引擎：")
+        print("            python tools/trt/export_vsr_onnx.py --t 8 --size 836 480")
     return 0 if ok else 1
 
 

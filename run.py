@@ -64,9 +64,19 @@ def get_cuts(video, engine, min_shot, threshold, cuts_file, total_hint=None):
 def build_engines(args, need_sr, need_fi):
     sr = fi = None
     if need_sr:
-        from pipeline import SrEngine
-        sr = SrEngine(fp16=args.fp16, chunk=args.chunk, overlap=args.overlap,
-                      device=args.device)
+        backend = getattr(args, "sr_backend", "torch")
+        if backend == "trt":
+            # TensorRT 版 BasicVSR++。接口与 SrEngine 完全一致，可直接互换。
+            # 引擎要预先准备好（见 tools/trt/README.md），没装 TensorRT 会直接报错。
+            from pipeline import SrTrtEngine
+            # ★ TRT 引擎是**固定形状**的：t 在编译时写死，所以 chunk 必须等于引擎的 t。
+            #   默认用 tools/download_trt_engine.py 下到的那个 t=8 引擎。
+            t = args.trt_t if getattr(args, "trt_t", 0) else args.chunk
+            sr = SrTrtEngine(chunk=t, overlap=0, device=args.device)
+        else:
+            from pipeline import SrEngine
+            sr = SrEngine(fp16=args.fp16, chunk=args.chunk, overlap=args.overlap,
+                          device=args.device)
     if need_fi:
         from pipeline import FiEngine
         fi = FiEngine(fp16=args.fp16, batch=args.batch, device=args.device)
@@ -101,6 +111,14 @@ def main():
                    help="帧率不变、时长翻倍（便于逐帧看插入帧）")
 
     g = ap.add_argument_group("性能")
+    g.add_argument("--sr-backend", choices=["torch", "trt"], default="torch",
+                   help="[超分] 推理后端。torch=PyTorch（默认，无需预先准备）；"
+                        "trt=TensorRT（需先备好引擎，见 tools/trt/README.md。"
+                        "实测 TF32 版 78.54 dB / 最大差 1/255，比 PyTorch fp32 快 1.69x）")
+    g.add_argument("--trt-t", type=int, default=0,
+                   help="[超分] 仅 --sr-backend trt 时用：引擎的帧数 t。"
+                        "0=跟随 --chunk。TensorRT 引擎是固定形状，这里必须与引擎实际"
+                        "编译的 t 一致，否则会报形状不符")
     g.add_argument("--chunk", type=int, default=8, help="[超分] 分段长度")
     g.add_argument("--overlap", type=int, default=2, help="[超分] 分段重叠帧数")
     g.add_argument("--batch", type=int, default=2, help="[插帧] 批量（5K 下别超 2）")
