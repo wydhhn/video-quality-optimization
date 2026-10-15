@@ -31,6 +31,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "engine"))
 
+# ---------------------------------------------------------------------------
+# 标准流统一切到 UTF-8。
+#
+# 踩过的坑：中文 Windows 下（控制台默认 GBK，尤其是计划任务/SYSTEM 环境
+# 重定向到文件时），打印带 emoji 的横幅会抛 UnicodeEncodeError 把服务
+# 直接干掉 —— 报错发生在 print 里，看起来像"服务莫名启动失败"。
+# 这里把 stdout/stderr 一次性改成 UTF-8，不可编码字符降级为占位符，
+# 后续所有模块的 print 都不会再因为编码问题崩溃。
+# ---------------------------------------------------------------------------
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
 from config import VSR_WEIGHT, RIFE_WEIGHT, RESR_WEIGHT, ensure_dirs  # noqa: E402
 from jobs import MAX_UPLOAD_MB, JobManager  # noqa: E402
 from pipeline import Pipeline, Progress  # noqa: E402

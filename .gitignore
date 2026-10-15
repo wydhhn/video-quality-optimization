@@ -170,6 +170,10 @@ cython_debug/
 *.engine
 trt5/
 webapp/cache/
+# 运行态文件（每台机器不同：任务工作区、公网地址、服务日志）
+webapp/data/
+webapp/current_url.txt
+webapp/serve.log
 # ONNX 导出的外部数据（.weight / _Constant_* 这类散文件）
 *.onnx
 *.onnx.data
